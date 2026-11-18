@@ -731,8 +731,10 @@
   document.getElementById("kbClose").addEventListener("click", function () {
     kbOverlay.classList.remove("show");
   });
-  kbOverlay.addEventListener("click", function (e) {
-    if (e.target === kbOverlay) kbOverlay.classList.remove("show");
+
+  kbFile.addEventListener("change", function () {
+    var f = kbFile.files[0];
+    if (f) kbUploadName.value = f.name.replace(/\.[^.]+$/, "");
   });
 
   kbUploadBtn.addEventListener("click", function () {
