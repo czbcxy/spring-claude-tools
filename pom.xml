@@ -33,6 +33,13 @@
         <pdfbox.version>3.0.3</pdfbox.version>
     </properties>
     <dependencies>
+        <!-- Web 层：提供 SSE 流式对话接口与静态页面托管。
+             选 WebFlux 而非 MVC，因为 Spring AI 的流式响应本身就是 Reactor Flux，
+             保持同一响应式栈可以避免 Servlet 与 Reactor 混用的线程模型问题。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-deepseek</artifactId>
