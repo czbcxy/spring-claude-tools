@@ -48,10 +48,12 @@ public class RagConfiguration {
     private static final Logger log = LoggerFactory.getLogger(RagConfiguration.class);
 
     /** 检索返回的文档块数量：太小漏答案，太大引入噪声。4 是较常见的起点。 */
-    public static final int DEFAULT_TOP_K = 4;
+    public static final int DEFAULT_TOP_K = 6;
 
     /** 相似度阈值（0~1）：低于此分数的块被过滤，避免无关内容污染上下文。 */
-    public static final double DEFAULT_SIMILARITY_THRESHOLD = 0.45;
+    // MiniLM 对中文的相似度分数整体偏低（实测强相关片段约 0.44），
+    // 阈值 0.45 会把正确答案过滤成"未找到"；中文场景 0.30 更实用。
+    public static final double DEFAULT_SIMILARITY_THRESHOLD = 0.30;
 
     /**
      * 文档切块器。

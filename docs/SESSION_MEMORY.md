@@ -293,3 +293,14 @@ bb31f38  feat: 新增 Web 对话界面与 SSE 流式接口
 ```
 
 本地 `main` 与 `origin/main` 在 `3b680a1` 时一致，RAG 改造在其之上未提交。
+
+## 多知识库管理（本轮新增）
+
+- 多个知识库共用 `rag_documents` 一张表，以 `metadata.kb` 区分，缺省归入 `default`；旧数据 kb 为空，列表里 coalesce 成 default 展示。
+- `DocumentIngestService`：`ingestFile/ingestDirectory/ingestResource` 均接受 kb 参数；`listKnowledgeBases()`/`deleteKnowledgeBase()` 走 JdbcTemplate 直接查/删 metadata。
+- `RagController` 新增：`GET /api/rag/kbs`、`DELETE /api/rag/kb?name=`、`POST /api/rag/upload?kb=`（multipart，WebFlux 用 `@RequestPart FilePart` + DataBufferUtils.join → ByteArrayResource；`@RequestParam MultipartFile` 在 WebFlux 下 400）；`/search` 和 `/stream` 支持 `kb` 参数。
+- 检索隔离：stream 时把 `qa_filter_expression`（`kb == 'xxx'`）放进 advisor context，`QuestionAnswerAdvisor` 用 `FilterExpressionTextParser` 解析后下发到 SearchRequest。kb 参数拼表达式前会剔除单引号。
+- 前端：`index.html` 输入区加"管理"按钮 → 知识库面板（radio 选用/删除/上传），选中库存 `localStorage("rag.kb")`，RAG 模式请求体带 `kb` 字段。
+- `application.properties`：`spring.ai.embedding.transformer.cache.directory=${user.home}/.cache/spring-ai-model` 固定缓存目录，否则每次启动随机 temp 目录重复下载 90MB 模型。
+- 已验证：上传（中文库名）、按库 search 隔离、kb=test 能答 青鸾 / kb=default 返回"知识库中未找到"、DELETE 清理。
+- 注意：curl 测中文 query 必须 `--data-urlencode`，否则服务端拿到的 query 为空导致误判检索失败。

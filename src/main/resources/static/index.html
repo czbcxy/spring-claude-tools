@@ -317,6 +317,41 @@
                 color:var(--text-faint); cursor:pointer; user-select:none; }
   .rag-toggle input { accent-color:#6ea8fe; cursor:pointer; }
   .rag-toggle.on { color:#9ec1ff; }
+  .kb-manage { background:none; border:none; color:var(--text-faint); font-size:12px;
+               cursor:pointer; padding:2px 6px; border-radius:6px; }
+  .kb-manage:hover { color:#9ec1ff; background:rgba(255,255,255,.06); }
+  .kb-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); display:none;
+                align-items:center; justify-content:center; z-index:100; }
+  .kb-overlay.show { display:flex; }
+  .kb-panel { width:520px; max-width:92vw; max-height:80vh; display:flex; flex-direction:column;
+              background:#1b2030; border:1px solid rgba(255,255,255,.12); border-radius:14px;
+              padding:18px 20px; box-shadow:0 18px 50px rgba(0,0,0,.5); }
+  .kb-head { display:flex; justify-content:space-between; align-items:center;
+             font-size:15px; font-weight:600; color:#dfe6f3; margin-bottom:12px; }
+  .kb-close { background:none; border:none; color:var(--text-faint); font-size:20px;
+              cursor:pointer; line-height:1; }
+  .kb-close:hover { color:#fff; }
+  .kb-list { flex:1; overflow-y:auto; margin-bottom:14px; }
+  .kb-item { display:flex; align-items:center; gap:10px; padding:9px 10px;
+             border-radius:8px; font-size:13px; color:#c6cfdf; }
+  .kb-item:hover { background:rgba(255,255,255,.05); }
+  .kb-item .kb-name { flex:1; }
+  .kb-item .kb-chunks { color:var(--text-faint); font-size:12px; }
+  .kb-item .kb-del { background:none; border:none; color:var(--text-faint);
+                     cursor:pointer; font-size:12px; padding:2px 6px; border-radius:5px; }
+  .kb-item .kb-del:hover { color:var(--danger); background:rgba(255,80,80,.12); }
+  .kb-item input[type=radio] { accent-color:#6ea8fe; }
+  .kb-empty { color:var(--text-faint); font-size:13px; padding:18px 4px; text-align:center; }
+  .kb-upload { border-top:1px solid rgba(255,255,255,.08); padding-top:12px; }
+  .kb-upload-row { display:flex; gap:8px; align-items:center; }
+  .kb-upload-row input[type=text] { width:140px; background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12); border-radius:7px; color:#dfe6f3;
+      padding:6px 8px; font-size:12px; }
+  .kb-upload-row input[type=file] { flex:1; font-size:12px; color:var(--text-faint); }
+  .kb-upload-row button { background:#3a62b3; border:none; color:#fff; font-size:12px;
+      padding:6px 14px; border-radius:7px; cursor:pointer; }
+  .kb-upload-row button:hover { background:#4774cc; }
+  .kb-upload-status { font-size:12px; color:var(--text-faint); margin-top:8px; min-height:14px; }
   .composer-foot .clear {
     cursor:pointer; color:#4d5266; transition:color .2s;
     background:none; border:none; font-family:inherit;
@@ -392,8 +427,28 @@
         <label class="rag-toggle" title="开启后先检索知识库再回答">
           <input type="checkbox" id="ragMode"> 知识库模式<span id="ragCount"></span>
         </label>
+        <button class="kb-manage" id="kbManageBtn">管理</button>
         <button class="clear" id="clearBtn">清空对话</button>
       </span>
+    </div>
+  </div>
+</div>
+
+<!-- 知识库管理面板 -->
+<div class="kb-overlay" id="kbOverlay">
+  <div class="kb-panel">
+    <div class="kb-head">
+      <span>知识库管理</span>
+      <button class="kb-close" id="kbClose">×</button>
+    </div>
+    <div class="kb-list" id="kbList"></div>
+    <div class="kb-upload">
+      <div class="kb-upload-row">
+        <input type="text" id="kbUploadName" placeholder="目标知识库名">
+        <input type="file" id="kbFile" accept=".md,.txt,.pdf">
+        <button id="kbUploadBtn">上传</button>
+      </div>
+      <div class="kb-upload-status" id="kbUploadStatus"></div>
     </div>
   </div>
 </div>
@@ -412,6 +467,14 @@
   var statusText = document.getElementById("statusText");
   var ragMode    = document.getElementById("ragMode");
   var ragCount   = document.getElementById("ragCount");
+  var kbOverlay  = document.getElementById("kbOverlay");
+  var kbList     = document.getElementById("kbList");
+  var kbUploadName   = document.getElementById("kbUploadName");
+  var kbFile     = document.getElementById("kbFile");
+  var kbUploadBtn    = document.getElementById("kbUploadBtn");
+  var kbUploadStatus = document.getElementById("kbUploadStatus");
+
+  var activeKb = localStorage.getItem("rag.kb") || "default";
 
   var busy = false;
   var abortCtl = null;
@@ -431,10 +494,15 @@
     });
 
   /* ---------- 知识库规模 ---------- */
-  fetch("/api/rag/status")
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-    .then(function (st) { ragCount.textContent = "（" + st.documents + " 条）"; })
-    .catch(function () { ragMode.disabled = true; ragCount.textContent = "（不可用）"; });
+  function refreshKbStatus() {
+    fetch("/api/rag/status")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (st) {
+        ragCount.textContent = "（" + activeKb + " · " + st.documents + " 条）";
+      })
+      .catch(function () { ragMode.disabled = true; ragCount.textContent = "（不可用）"; });
+  }
+  refreshKbStatus();
 
   ragMode.addEventListener("change", function () {
     ragMode.parentNode.classList.toggle("on", ragMode.checked);
@@ -609,6 +677,85 @@
     input.style.height = Math.min(input.scrollHeight, 190) + "px";
   }
 
+  /* ---------- 知识库管理 ---------- */
+  function loadKbList() {
+    kbList.innerHTML = '<div class="kb-empty">加载中…</div>';
+    fetch("/api/rag/kbs")
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (kbs) {
+        if (!kbs || kbs.length === 0) {
+          kbList.innerHTML = '<div class="kb-empty">还没有知识库，上传一个文档开始吧</div>';
+          return;
+        }
+        // 若当前选中的库已不存在，回退到第一个
+        var names = kbs.map(function (k) { return k.NAME || k.name; });
+        if (names.indexOf(activeKb) < 0) setActiveKb(names[0]);
+        kbList.innerHTML = "";
+        kbs.forEach(function (k) {
+          var name = k.NAME || k.name;
+          var chunks = k.CHUNKS || k.chunks;
+          var row = document.createElement("div");
+          row.className = "kb-item";
+          row.innerHTML =
+            '<input type="radio" name="activeKb"' + (name === activeKb ? " checked" : "") + '>' +
+            '<span class="kb-name">' + escapeHtml(name) + '</span>' +
+            '<span class="kb-chunks">' + chunks + " 块</span>" +
+            '<button class="kb-del">删除</button>';
+          row.querySelector("input").addEventListener("change", function () {
+            setActiveKb(name);
+          });
+          row.querySelector(".kb-del").addEventListener("click", function () {
+            if (!confirm('删除知识库 "' + name + '" 及其全部 ' + chunks + " 个文档块？")) return;
+            fetch("/api/rag/kb?name=" + encodeURIComponent(name), { method: "DELETE" })
+              .then(function () { loadKbList(); refreshKbStatus(); });
+          });
+          kbList.appendChild(row);
+        });
+      })
+      .catch(function () { kbList.innerHTML = '<div class="kb-empty">加载失败</div>'; });
+  }
+
+  function setActiveKb(name) {
+    activeKb = name;
+    localStorage.setItem("rag.kb", name);
+    kbUploadName.value = name;
+    refreshKbStatus();
+  }
+
+  document.getElementById("kbManageBtn").addEventListener("click", function () {
+    kbUploadName.value = activeKb;
+    kbUploadStatus.textContent = "";
+    loadKbList();
+    kbOverlay.classList.add("show");
+  });
+  document.getElementById("kbClose").addEventListener("click", function () {
+    kbOverlay.classList.remove("show");
+  });
+  kbOverlay.addEventListener("click", function (e) {
+    if (e.target === kbOverlay) kbOverlay.classList.remove("show");
+  });
+
+  kbUploadBtn.addEventListener("click", function () {
+    var f = kbFile.files[0];
+    var kb = (kbUploadName.value || "").trim() || "default";
+    if (!f) { kbUploadStatus.textContent = "先选择要上传的文件（md/txt/pdf）"; return; }
+    var fd = new FormData();
+    fd.append("file", f);
+    kbUploadStatus.textContent = "上传并解析中…";
+    kbUploadBtn.disabled = true;
+    fetch("/api/rag/upload?kb=" + encodeURIComponent(kb), { method: "POST", body: fd })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (res) {
+        kbUploadStatus.textContent = res.file + "：" + res.status
+            + (res.chunks ? "（" + res.chunks + " 块）" : "");
+        kbFile.value = "";
+        setActiveKb(kb);
+        loadKbList();
+      })
+      .catch(function () { kbUploadStatus.textContent = "上传失败"; })
+      .finally(function () { kbUploadBtn.disabled = false; });
+  });
+
   /* ---------- 发送 ---------- */
   function send(text) {
     text = (text || "").trim();
@@ -634,7 +781,9 @@
     fetch(ragMode.checked ? "/api/rag/stream" : "/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify(ragMode.checked
+        ? { message: text, kb: activeKb }
+        : { message: text }),
       signal: abortCtl.signal
     })
     .then(function (res) {
