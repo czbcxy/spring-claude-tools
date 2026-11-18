@@ -122,14 +122,16 @@ public class RagConfiguration {
         // 禁止用模型先验知识补答，否则用户会把幻觉误认为知识库内容。
         // 占位符 {query} / {question_answer_context} 由 advisor 渲染，不可改名。
         String template = """
-                请仅根据下面提供的上下文回答问题。
-                如果上下文中不包含答案，请直接回答"知识库中未找到相关信息"，
+                请仅根据下面提供的上下文回答用户的输入。
+                如果用户输入不是一个明确的问题（例如只有一个名字或关键词），
+                请根据上下文介绍与之相关的内容。
+                仅当上下文与用户输入完全无关时，才回答"知识库中未找到相关信息"。
                 绝对不要使用你自己的知识补充，也不要编造任何不在上下文中的内容。
 
                 上下文：
                 {question_answer_context}
 
-                问题：{query}
+                用户输入：{query}
                 """;
 
         return QuestionAnswerAdvisor.builder(vectorStore)
