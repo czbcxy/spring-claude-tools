@@ -73,6 +73,35 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ==================== RAG 检索增强 ====================
+             Embedding：本地 Transformers（ONNX 运行时），不依赖外部 embedding API。
+                         原因：DeepSeek 未提供 embedding 接口，本地模型零成本且数据不出机器。
+             向量库：PGVector，标准 PostgreSQL 扩展，成熟稳定，支持 HNSW 索引。
+             检索注入：QuestionAnswerAdvisor（spring-ai-vector-store-advisor），
+                       与 ChatMemory 同属 Advisor 机制，可自然叠加。
+             ==================================================== -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-model-transformers</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-vector-store-advisor</artifactId>
+        </dependency>
+        <!-- 文档读取：Markdown 与 PDF 解析为 Document 后切块入库 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-markdown-document-reader</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-pdf-document-reader</artifactId>
+        </dependency>
+
         <!-- 文档解析（DocumentTools） -->
         <dependency>
             <groupId>org.apache.poi</groupId>
