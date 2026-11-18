@@ -123,25 +123,49 @@ public class RagController {
         }
         String sessionId = (body.sessionId() == null || body.sessionId().isBlank())
                 ? "rag-default" : "rag-" + body.sessionId();
+        String kb = body.kb();
 
-        var spec = chatClient.prompt()
-                .user(body.message())
-                .advisors(ragAdvisor, sessionMemoryAdvisor, SimpleLoggerAdvisor.builder().build())
-                .advisors(a -> a.param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, sessionId));
+        // 先预检：命中知识库 → 挂 RAG advisor 并标注"知识库"；
+        // 未命中 → 不挂 advisor 让模型自由作答，标注"大模型"。
+        // JDBC/向量检索是阻塞调用，放 boundedElastic 避免卡 Netty 事件循环。
+        return Mono.fromCallable(() -> hasKbHit(body.message(), kb))
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .flatMapMany(hit -> {
+                    var spec = chatClient.prompt()
+                            .user(body.message())
+                            .advisors(sessionMemoryAdvisor, SimpleLoggerAdvisor.builder().build())
+                            .advisors(a -> a.param(SessionMemoryAdvisor.SESSION_ID_CONTEXT_KEY, sessionId));
 
-        // 指定知识库 → 下发过滤表达式，只在该库内检索
-        if (body.kb() != null && !body.kb().isBlank()) {
-            spec.advisors(a -> a.param(QuestionAnswerAdvisor.FILTER_EXPRESSION,
-                    "kb == '" + body.kb().replace("'", "") + "'"));
+                    if (hit) {
+                        spec.advisors(ragAdvisor);
+                        if (kb != null && !kb.isBlank()) {
+                            spec.advisors(a -> a.param(QuestionAnswerAdvisor.FILTER_EXPRESSION,
+                                    "kb == '" + kb.replace("'", "") + "'"));
+                        }
+                    }
+
+                    Flux<ServerSentEvent<String>> content = spec.stream()
+                            .content()
+                            .map(chunk -> event("message", chunk))
+                            .onErrorResume(ex -> Flux.just(event("error", describe(ex))));
+
+                    return Flux.just(event("source", hit ? "知识库" : "大模型"))
+                            .concatWith(content)
+                            .concatWith(Flux.just(event("done", "[DONE]")))
+                            .timeout(Duration.ofMinutes(10));
+                });
+    }
+
+    /** 预检：该问题在目标知识库里有没有达标的相似片段。 */
+    private boolean hasKbHit(String query, String kb) {
+        var req = org.springframework.ai.vectorstore.SearchRequest.builder()
+                .query(query).topK(1)
+                .similarityThreshold(RagConfiguration.DEFAULT_SIMILARITY_THRESHOLD);
+        if (kb != null && !kb.isBlank()) {
+            req.filterExpression(new org.springframework.ai.vectorstore.filter
+                    .FilterExpressionTextParser().parse("kb == '" + kb.replace("'", "") + "'"));
         }
-
-        Flux<ServerSentEvent<String>> content = spec.stream()
-                .content()
-                .map(chunk -> event("message", chunk))
-                .onErrorResume(ex -> Flux.just(event("error", describe(ex))));
-
-        return content.concatWith(Flux.just(event("done", "[DONE]")))
-                .timeout(Duration.ofMinutes(10));
+        return !vectorStore.similaritySearch(req.build()).isEmpty();
     }
 
     /**
