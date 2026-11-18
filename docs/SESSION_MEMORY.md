@@ -2,7 +2,7 @@
 
 > 用途：供其他模型/开发者读取，接续本项目开发。
 > 生成时间：2026-11-18
-> 对应代码状态：本地 `main` = `3b680a1`，另有**未提交**的 RAG 改造。
+> 对应代码状态：本地 `main` = `088d389`（RAG 已提交），其上另有 P0 幻觉抑制 + 前端知识库开关的提交。
 
 ---
 
@@ -133,11 +133,14 @@ spring.ai.embedding.transformer.cache.enabled=true
 
 ## 四、待办事项（按优先级）
 
-### P0：修幻觉抑制（最重要）
+### P0：修幻觉抑制（✅ 已完成）
 
 **问题**：检索为空时，模型会先说"上下文里没有"，然后**自行用训练知识作答**。企业知识库场景下这会让用户误以为答案来自文档，是危险的。
 
 **原因**：`QuestionAnswerAdvisor` 默认 prompt 模板没有强制约束「只能用上下文作答」。
+
+**已完成**：`questionAnswerAdvisor()` 已挂强约束中文 promptTemplate（见下），
+实测库外问题（"Java 21 新特性"）只回"知识库中未找到相关信息"，不再补答。
 
 **修复位置**：`RagConfiguration.java` 的 `questionAnswerAdvisor()` 方法，加 `.promptTemplate(...)`：
 
@@ -180,9 +183,12 @@ public QuestionAnswerAdvisor questionAnswerAdvisor(VectorStore vectorStore) {
 
 不做评估就是凭感觉调参。
 
-### P3：前端接入
+### P3：前端接入（✅ 已完成）
 
-`index.html` 目前只接了 `/api/chat/stream`，还没接 RAG 接口。需要在页面上加「知识库模式」开关。
+`index.html` 底部栏已加「知识库模式」开关：
+- 勾选后请求走 `POST /api/rag/stream`（与 `/api/chat/stream` 同构：JSON body + SSE 事件流）
+- 启动时拉 `/api/rag/status` 显示文档条数，接口不可用时开关自动禁用
+- RAG 会话记忆以 `rag-` 前缀隔离，不污染普通对话历史
 
 ### P4：提交 RAG 代码
 
@@ -280,6 +286,7 @@ git push
 ## 七、提交历史
 
 ```
+088d389  feat: 接入 RAG 检索增强，新增文档入库与语义检索能力
 3b680a1  chore: 还原配置文件中文注释，日志级别调整为 info
 bb31f38  feat: 新增 Web 对话界面与 SSE 流式接口
 5f9eab2  feat: Spring AI 智能体工具集项目初始提交

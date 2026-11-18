@@ -3,6 +3,7 @@ package org.spring.claude.spring_claude_tools.rag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties;
@@ -115,11 +116,26 @@ public class RagConfiguration {
         log.info("初始化 RAG Advisor：topK={}, similarityThreshold={}",
                 DEFAULT_TOP_K, DEFAULT_SIMILARITY_THRESHOLD);
 
+        // 强约束模板：检索为空或上下文不相关时只许说"未找到"，
+        // 禁止用模型先验知识补答，否则用户会把幻觉误认为知识库内容。
+        // 占位符 {query} / {question_answer_context} 由 advisor 渲染，不可改名。
+        String template = """
+                请仅根据下面提供的上下文回答问题。
+                如果上下文中不包含答案，请直接回答"知识库中未找到相关信息"，
+                绝对不要使用你自己的知识补充，也不要编造任何不在上下文中的内容。
+
+                上下文：
+                {question_answer_context}
+
+                问题：{query}
+                """;
+
         return QuestionAnswerAdvisor.builder(vectorStore)
                 .searchRequest(SearchRequest.builder()
                         .topK(DEFAULT_TOP_K)
                         .similarityThreshold(DEFAULT_SIMILARITY_THRESHOLD)
                         .build())
+                .promptTemplate(new PromptTemplate(template))
                 .build();
     }
 }

@@ -312,6 +312,11 @@
     border:1px solid var(--border); border-radius:4px;
     padding:1px 5px; font-size:10px; color:var(--text-dim);
   }
+  .composer-foot .foot-right { display:flex; align-items:center; gap:14px; }
+  .rag-toggle { display:flex; align-items:center; gap:5px; font-size:12px;
+                color:var(--text-faint); cursor:pointer; user-select:none; }
+  .rag-toggle input { accent-color:#6ea8fe; cursor:pointer; }
+  .rag-toggle.on { color:#9ec1ff; }
   .composer-foot .clear {
     cursor:pointer; color:#4d5266; transition:color .2s;
     background:none; border:none; font-family:inherit;
@@ -383,7 +388,12 @@
     </div>
     <div class="composer-foot">
       <span class="hint"><kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行</span>
-      <button class="clear" id="clearBtn">清空对话</button>
+      <span class="foot-right">
+        <label class="rag-toggle" title="开启后先检索知识库再回答">
+          <input type="checkbox" id="ragMode"> 知识库模式<span id="ragCount"></span>
+        </label>
+        <button class="clear" id="clearBtn">清空对话</button>
+      </span>
     </div>
   </div>
 </div>
@@ -400,6 +410,8 @@
   var liveDot    = document.getElementById("liveDot");
   var toolCount  = document.getElementById("toolCount");
   var statusText = document.getElementById("statusText");
+  var ragMode    = document.getElementById("ragMode");
+  var ragCount   = document.getElementById("ragCount");
 
   var busy = false;
   var abortCtl = null;
@@ -417,6 +429,16 @@
       liveDot.classList.add("off");
       toolCount.textContent = "0";
     });
+
+  /* ---------- 知识库规模 ---------- */
+  fetch("/api/rag/status")
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (st) { ragCount.textContent = "（" + st.documents + " 条）"; })
+    .catch(function () { ragMode.disabled = true; ragCount.textContent = "（不可用）"; });
+
+  ragMode.addEventListener("change", function () {
+    ragMode.parentNode.classList.toggle("on", ragMode.checked);
+  });
 
   /* ---------- Markdown 渲染 ---------- */
   function escapeHtml(s) {
@@ -609,7 +631,7 @@
 
     abortCtl = new AbortController();
 
-    fetch("/api/chat/stream", {
+    fetch(ragMode.checked ? "/api/rag/stream" : "/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
       body: JSON.stringify({ message: text }),
